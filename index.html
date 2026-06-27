@@ -238,28 +238,48 @@
         + ':generateContent?key=' + encodeURIComponent(geminiKey);
     }
 
-    // bodyFactory: リクエスト本文を返す関数。404/429なら次のモデルに切り替えて再挑戦
+    // 一時的なエラー（混雑・上限・モデル無し）は次のモデルや再挑戦で対応する
+    function isTransient(status) {
+      return status === 404 || status === 429 || status === 500 || status === 503;
+    }
+    function wait(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+
+    // bodyFactory: リクエスト本文を返す関数。
+    // 404/429/500/503 は別モデルに切り替え、全部ダメなら少し待って最大2回まで再挑戦する
     function callGemini(bodyFactory) {
       var list = MODEL_CANDIDATES.slice();
       if (geminiModel) {
         list = [geminiModel].concat(list.filter(function (m) { return m !== geminiModel; }));
       }
-      var i = 0;
-      function attempt() {
-        var model = list[i];
-        return fetch(modelUrl(model), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(bodyFactory())
-        }).then(function (res) {
-          if ((res.status === 404 || res.status === 429) && i < list.length - 1) {
-            i++; return attempt();
-          }
-          if (res.ok) { geminiModel = model; localStorage.setItem('geminiModel', model); }
-          return handleGemini(res);
-        });
+      var MAX_ROUNDS = 3;
+
+      function round(roundNum) {
+        var i = 0;
+        function attempt() {
+          var model = list[i];
+          return fetch(modelUrl(model), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(bodyFactory())
+          }).then(function (res) {
+            if (res.ok) {
+              geminiModel = model;
+              localStorage.setItem('geminiModel', model);
+              return handleGemini(res);
+            }
+            if (isTransient(res.status) && i < list.length - 1) {
+              i++; return attempt();
+            }
+            // 最後のモデルも一時的エラー → 少し待ってもう一周（混雑がおさまるのを待つ）
+            if (res.status !== 404 && isTransient(res.status) && roundNum < MAX_ROUNDS) {
+              return wait(1500 * roundNum).then(function () { return round(roundNum + 1); });
+            }
+            return handleGemini(res); // それでもダメならエラー表示
+          });
+        }
+        return attempt();
       }
-      return attempt();
+      return round(1);
     }
 
     function showApiKeyModal() {
@@ -324,6 +344,9 @@
         }
         if (res.status === 429) {
           throw new Error('Geminiの無料枠の上限みたい。1分ほど待つか、明日また試してね\n（詳細：' + detail + '）');
+        }
+        if (res.status === 500 || res.status === 503) {
+          throw new Error('Gemini側が今こんでいるみたい（' + res.status + '）。少し待って、もう一度ためしてね\n（詳細：' + detail + '）');
         }
         throw new Error('Geminiエラー（' + res.status + '）\n（詳細：' + detail + '）');
       });
