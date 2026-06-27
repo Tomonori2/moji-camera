@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>高坂先生の文字起こしカメラ</title>
+  <!-- スマホアプリ化（PWA）用 -->
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#4a90c4">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="文字カメラ">
+  <link rel="apple-touch-icon" href="icon.png">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Helvetica Neue', sans-serif;
+      min-height: 100vh;
+      color: #fff;
+      background: linear-gradient(160deg, #4a90c4 0%, #6aaed6 30%, #7ab84a 75%, #4a8a28 100%);
+      padding: 24px 16px 60px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    header { text-align: center; margin-bottom: 18px; }
+    header .icon-img {
+      height: 110px; width: auto; max-width: 260px; object-fit: contain;
+      filter: drop-shadow(0 4px 10px rgba(0,0,0,0.25));
+    }
+    header .icon { font-size: 64px; line-height: 1; }
+    header h1 {
+      font-size: 24px; margin-top: 8px;
+      background: linear-gradient(90deg, #fff, #ffd93d);
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text;
+    }
+    header p { font-size: 13px; color: rgba(255,255,255,0.9); margin-top: 6px; }
+
+    .topbar { width: 100%; max-width: 620px; display: flex; justify-content: flex-end; margin-bottom: 8px; }
+
+    .card {
+      width: 100%; max-width: 620px;
+      background: rgba(255,255,255,0.1);
+      border: 1px solid rgba(255,255,255,0.18);
+      border-radius: 18px;
+      padding: 20px;
+      margin-bottom: 16px;
+      backdrop-filter: blur(8px);
+    }
+    .card .label { font-size: 12px; color: rgba(255,255,255,0.75); letter-spacing: 1px; margin-bottom: 12px; }
+
+    .btn {
+      border: none; border-radius: 12px; color: #fff;
+      padding: 12px 20px; font-size: 15px; font-weight: bold; cursor: pointer;
+      transition: transform 0.1s, opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.9; }
+    .btn:active { transform: scale(0.97); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-cam  { background: linear-gradient(135deg, #f59e0b, #ef4444); }
+    .btn-pic  { background: linear-gradient(135deg, #f093fb, #f5576c); }
+    .btn-tidy { background: linear-gradient(135deg, #667eea, #764ba2); }
+    .btn-sum  { background: linear-gradient(135deg, #06b6d4, #3b82f6); }
+    .btn-form { background: linear-gradient(135deg, #10b981, #059669); }
+    .btn-ghost { background: rgba(255,255,255,0.15); font-weight: normal; font-size: 13px; padding: 8px 14px; }
+
+    .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+    .status { font-size: 13px; color: rgba(255,255,255,0.9); }
+
+    select {
+      font-family: inherit; font-size: 14px; padding: 10px 12px;
+      border-radius: 10px; border: 1px solid rgba(255,255,255,0.25);
+      background: rgba(0,0,0,0.25); color: #fff; cursor: pointer;
+    }
+    textarea#tpl {
+      width: 100%; margin-top: 12px; min-height: 150px; resize: vertical;
+      font-family: inherit; font-size: 15px; line-height: 1.7;
+      padding: 12px; border-radius: 12px;
+      border: 1px solid rgba(255,255,255,0.25);
+      background: rgba(0,0,0,0.22); color: #fff;
+    }
+    textarea#tpl:focus { outline: 2px solid rgba(255,255,255,0.5); }
+
+    #preview {
+      display: none; width: 100%; max-height: 280px; object-fit: contain;
+      margin-top: 14px; border-radius: 12px; background: rgba(0,0,0,0.25);
+    }
+
+    .result {
+      margin-top: 14px; padding: 14px; border-radius: 12px;
+      background: rgba(0,0,0,0.18); font-size: 15px; line-height: 1.8;
+      white-space: pre-wrap; min-height: 40px;
+    }
+    .hint { font-size: 11px; color: rgba(255,255,255,0.6); margin-top: 8px; line-height: 1.6; }
+    .spin { display: inline-block; animation: spin 1s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* --- APIキー設定モーダル --- */
+    #apiKeyModal {
+      display: none; position: fixed; inset: 0; z-index: 300;
+      background: rgba(0,0,0,0.65); align-items: center; justify-content: center; padding: 16px;
+    }
+    #apiKeyModal.show { display: flex; }
+    .api-modal-box {
+      background: #fff; color: #333; border-radius: 24px; padding: 26px 22px;
+      max-width: 400px; width: 100%; text-align: center;
+      max-height: 88vh; overflow-y: auto;
+      box-shadow: 0 12px 48px rgba(0,0,0,0.3);
+    }
+    .api-modal-box h2 { font-size: 18px; color: #4a90c4; margin-bottom: 10px; }
+    .api-modal-box p { font-size: 13px; color: #555; line-height: 1.7; margin-bottom: 14px; }
+    .api-modal-box a { color: #2a7ac4; font-weight: bold; }
+    .api-steps {
+      text-align: left; background: #f5f9ff; border: 1px solid #d6e6fb;
+      border-radius: 14px; padding: 14px 16px 14px 18px; margin: 0 0 14px;
+    }
+    .api-steps .ttl { font-size: 13px; font-weight: bold; color: #4a90c4; margin-bottom: 8px; }
+    .api-steps ol { margin: 0; padding-left: 18px; }
+    .api-steps li { font-size: 13px; color: #444; line-height: 1.8; margin-bottom: 4px; }
+    .btn-open {
+      display: block; width: 100%; text-decoration: none; box-sizing: border-box;
+      background: linear-gradient(135deg, #4a90c4, #2a7ac4); color: #fff;
+      font-weight: bold; font-size: 15px; padding: 13px; border-radius: 12px; margin-bottom: 14px;
+    }
+    .api-key-input {
+      width: 100%; padding: 12px 14px; border-radius: 12px;
+      border: 2.5px solid #ffd93d; font-size: 13px; font-family: monospace;
+      outline: none; margin-bottom: 14px;
+    }
+    .api-key-input:focus { border-color: #f5a623; }
+    .api-modal-box .btn-save { background: linear-gradient(135deg, #7ab84a, #4a8a28); width: 100%; margin-bottom: 8px; }
+    .api-modal-box .btn-skip { background: #ddd; color: #555; width: 100%; }
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <button class="btn btn-ghost" onclick="showApiKeyModal()">🔑 APIキー設定</button>
+  </div>
+
+  <header>
+    <img class="icon-img" src="robot.png" alt="高坂先生" onerror="this.outerHTML='<div class=\'icon\'>🤖</div>'">
+    <h1>文字起こしカメラ</h1>
+    <p>高坂先生が、写真の文字をまるごと読み取ります。ピポパポ！</p>
+  </header>
+
+  <!-- STEP 1: 写真を用意 -->
+  <div class="card">
+    <div class="label">STEP 1 ＿ 写真を用意する</div>
+    <div class="row">
+      <button class="btn btn-cam" onclick="document.getElementById('cam-input').click()">📷 写真をとる</button>
+      <button class="btn btn-pic" onclick="document.getElementById('pic-input').click()">🖼 画像を選ぶ</button>
+      <span class="status" id="status">ボタンを押して、文字を写してね</span>
+    </div>
+    <input type="file" id="cam-input" accept="image/*" capture="environment" style="display:none;" onchange="pickImage(this)">
+    <input type="file" id="pic-input" accept="image/*" style="display:none;" onchange="pickImage(this)">
+    <img id="preview" alt="プレビュー">
+    <div class="hint">📌 看板・書類・レシート・メモなど。明るく・まっすぐ・大きく写すとよく読めます</div>
+  </div>
+
+  <!-- STEP 2: 読み取り結果 -->
+  <div class="card">
+    <div class="label">STEP 2 ＿ 読み取った文字</div>
+    <div class="result" id="ocr">ここに読み取った文字が表示されます</div>
+    <div class="row" style="margin-top:10px;">
+      <button class="btn btn-tidy" id="tidy-btn" onclick="tidy('tidy')" disabled>✨ 読みやすく整える</button>
+      <button class="btn btn-sum"  id="sum-btn"  onclick="tidy('summary')" disabled>💫 要約する</button>
+      <button class="btn btn-ghost" onclick="copyText('ocr')">📋 コピー</button>
+    </div>
+  </div>
+
+  <!-- STEP 3: 決まった書式に入れる -->
+  <div class="card">
+    <div class="label">STEP 3 ＿ 決まった書式に入れる</div>
+    <div class="row">
+      <select id="tpl-select" onchange="loadTemplate()">
+        <option value="receipt">🧾 レシート・領収書</option>
+        <option value="card">💳 名刺・連絡先</option>
+        <option value="event">📅 案内・チラシ（予定）</option>
+        <option value="daily">📋 業務日報</option>
+        <option value="minutes">🗒 会議の議事録</option>
+        <option value="free">✏️ 自由（自分で書く）</option>
+      </select>
+      <button class="btn btn-form" id="form-btn" onclick="applyFormat()" disabled>📥 この書式に入れる</button>
+    </div>
+    <textarea id="tpl" spellcheck="false"></textarea>
+    <div class="hint">📌 上の欄が「書式」です。項目名は自由に書き換えOK。先に写真を読み取ってからボタンを押してね</div>
+    <div class="result" id="formatted" style="margin-top:14px;">ここに、書式に入れた結果が出ます</div>
+    <div class="row" style="margin-top:10px;">
+      <button class="btn btn-ghost" onclick="copyText('formatted')">📋 コピー</button>
+    </div>
+  </div>
+
+  <!-- STEP 4: AIで整える -->
+  <div class="card">
+    <div class="label">STEP 4 ＿ 整えた文・要約</div>
+    <div class="result" id="tidy">「整える」か「要約する」を押してね</div>
+    <div class="row" style="margin-top:10px;">
+      <button class="btn btn-ghost" onclick="copyText('tidy')">📋 コピー</button>
+    </div>
+  </div>
+
+  <!-- APIキー設定モーダル -->
+  <div id="apiKeyModal">
+    <div class="api-modal-box">
+      <h2>🔑 Gemini APIキーを入れてね</h2>
+      <p>このアプリは、あなた自身の<b>無料のGemini APIキー</b>で動きます。<br>
+        キーは<b>あなたのスマホ・パソコンの中だけ</b>に保存され、外には送られません。</p>
+
+      <a class="btn-open" href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">🔗 Google AI Studio を開く</a>
+
+      <div class="api-steps">
+        <div class="ttl">📖 APIキーの取りかた（無料・3分）</div>
+        <ol>
+          <li>上の「Google AI Studio を開く」を押す</li>
+          <li>Googleアカウントでログインする</li>
+          <li>「<b>+ Create API key</b>（APIキーを作成）」を押す</li>
+          <li>表示された「<b>AIza…</b>」で始まる文字を全部コピーする</li>
+          <li>下のらんに貼り付けて「この鍵で使う」を押す</li>
+        </ol>
+      </div>
+
+      <input id="apiKeyInput" class="api-key-input" type="text" placeholder="AIza...（ここに貼り付け）">
+      <button class="btn btn-save" onclick="saveApiKey()">この鍵で使う</button>
+      <button class="btn btn-skip" onclick="closeApiKeyModal()">あとで</button>
+    </div>
+  </div>
+
+  <script>
+    // ===== Gemini（ブラウザから直接呼ぶ・キーはユーザーが入れる）=====
+    var GEMINI_MODEL = 'gemini-2.0-flash';
+    var GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/' + GEMINI_MODEL + ':generateContent';
+    var geminiKey = localStorage.getItem('geminiApiKey') || '';
+
+    function showApiKeyModal() {
+      document.getElementById('apiKeyInput').value = geminiKey;
+      document.getElementById('apiKeyModal').classList.add('show');
+    }
+    function closeApiKeyModal() {
+      document.getElementById('apiKeyModal').classList.remove('show');
+    }
+    function saveApiKey() {
+      var val = document.getElementById('apiKeyInput').value.trim();
+      if (!val) { alert('APIキーを入力してね'); return; }
+      geminiKey = val;
+      localStorage.setItem('geminiApiKey', val);
+      closeApiKeyModal();
+      document.getElementById('status').textContent = '✅ 鍵を保存したよ！写真を撮ってみてね';
+    }
+    function needKey() {
+      if (!geminiKey) { showApiKeyModal(); return true; }
+      return false;
+    }
+
+    // 画像をGeminiで読む（OCR）
+    function geminiVision(promptText, dataUrl) {
+      var comma = dataUrl.indexOf(',');
+      var mime = dataUrl.substring(5, dataUrl.indexOf(';'));
+      var b64 = dataUrl.substring(comma + 1);
+      return fetch(GEMINI_URL + '?key=' + encodeURIComponent(geminiKey), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [
+            { text: promptText },
+            { inline_data: { mime_type: mime, data: b64 } }
+          ] }],
+          generationConfig: { temperature: 0, maxOutputTokens: 4096 }
+        })
+      }).then(handleGemini);
+    }
+
+    // 文字だけをGeminiで処理（整える・要約・書式に入れる）
+    function geminiText(instruction, body) {
+      return fetch(GEMINI_URL + '?key=' + encodeURIComponent(geminiKey), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: instruction + '\n\n' + body }] }],
+          generationConfig: { temperature: 0, maxOutputTokens: 2048 }
+        })
+      }).then(handleGemini);
+    }
+
+    function handleGemini(res) {
+      if (res.status === 400 || res.status === 403) {
+        throw new Error('APIキーが正しくないかも。右上の「🔑 APIキー設定」を確認してね');
+      }
+      if (res.status === 429) {
+        throw new Error('Geminiの無料枠が混んでいます。少し待ってからもう一度ためしてね');
+      }
+      if (!res.ok) { throw new Error('Geminiエラー（' + res.status + '）'); }
+      return res.json().then(function (d) {
+        var t = d && d.candidates && d.candidates[0] && d.candidates[0].content
+          && d.candidates[0].content.parts && d.candidates[0].content.parts[0]
+          && d.candidates[0].content.parts[0].text;
+        return (t || '').trim();
+      });
+    }
+
+    // ===== 写真を選ぶ → 小さくして読み取る =====
+    function pickImage(input) {
+      var file = input.files[0];
+      if (!file) return;
+      input.value = '';
+      if (needKey()) return;
+      var reader = new FileReader();
+      reader.onload = function (e) { shrinkAndRead(e.target.result); };
+      reader.readAsDataURL(file);
+    }
+
+    function shrinkAndRead(dataUrl) {
+      var img = new Image();
+      img.onload = function () {
+        var max = 1280;
+        var w = img.width, h = img.height;
+        if (w > max || h > max) {
+          if (w >= h) { h = Math.round(h * max / w); w = max; }
+          else { w = Math.round(w * max / h); h = max; }
+        }
+        var canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        var small = canvas.toDataURL('image/jpeg', 0.8);
+        var pv = document.getElementById('preview');
+        pv.src = small; pv.style.display = 'block';
+        readImage(small);
+      };
+      img.src = dataUrl;
+    }
+
+    var OCR_PROMPT = '画像に写っているすべての文字を、見た目のレイアウト・改行をできるだけ保ったまま正確に書き出してください。'
+      + '前置き・説明・感想・マークダウン記号は一切付けず、読み取った文字だけを返してください。'
+      + '文字が一つも見つからない場合は「（文字は見つかりませんでした）」とだけ返してください。';
+
+    function readImage(dataUrl) {
+      var el = document.getElementById('ocr');
+      el.innerHTML = '<span class="spin">🤖</span> 高坂先生が読み取り中…ピポパポ！';
+      document.getElementById('status').textContent = '読み取り中…';
+      document.getElementById('tidy-btn').disabled = true;
+      document.getElementById('sum-btn').disabled = true;
+      document.getElementById('form-btn').disabled = true;
+
+      geminiVision(OCR_PROMPT, dataUrl)
+        .then(function (text) {
+          el.textContent = text || '（文字は見つかりませんでした）';
+          document.getElementById('tidy-btn').disabled = false;
+          document.getElementById('sum-btn').disabled = false;
+          document.getElementById('form-btn').disabled = false;
+          document.getElementById('status').textContent = '✅ 読み取り完了！STEP3で書式に入れられます';
+        })
+        .catch(function (err) {
+          el.textContent = '😅 ' + err.message;
+          document.getElementById('status').textContent = 'もう一度ためしてね';
+        });
+    }
+
+    // ===== 決まった書式 =====
+    var TEMPLATES = {
+      receipt:
+        '日付：\n店名：\n品目：\n金額：\n合計：\n支払い方法：',
+      card:
+        '氏名：\nフリガナ：\n会社・団体：\n役職：\n電話：\nメール：\n住所：\nURL：',
+      event:
+        'イベント名：\n日時：\n場所：\n内容：\n費用：\n申し込み・問い合わせ：',
+      daily:
+        '日付：\n氏名：\n今日やったこと：\n成果：\n課題・困ったこと：\n明日の予定：',
+      minutes:
+        '日時：\n場所：\n出席者：\n議題：\n決まったこと：\n宿題（担当・期限）：',
+      free:
+        '項目1：\n項目2：\n項目3：'
+    };
+
+    function loadTemplate() {
+      var key = document.getElementById('tpl-select').value;
+      document.getElementById('tpl').value = TEMPLATES[key] || '';
+    }
+
+    var FORMAT_PROMPT = 'あなたは書類整理のアシスタントです。次の「書式」の項目を、「読み取った文字」の内容で埋めて返してください。'
+      + 'ルール:（1）書式の項目名・並び・記号（：や改行）は一切変えない。'
+      + '（2）該当する情報が見つからない項目は「（不明）」と書く。'
+      + '（3）推測やでっち上げはしない。読み取った文字に書かれていることだけを使う。'
+      + '（4）書式以外の前置き・説明・感想・マークダウン記号は一切付けない。埋めた書式だけを返す。';
+
+    function applyFormat() {
+      if (needKey()) return;
+      var text = document.getElementById('ocr').textContent;
+      var template = document.getElementById('tpl').value;
+      var out = document.getElementById('formatted');
+      out.innerHTML = '<span class="spin">📥</span> 書式に当てはめています…';
+      geminiText(FORMAT_PROMPT, '【書式】\n' + template + '\n\n【読み取った文字】\n' + text)
+        .then(function (result) { out.textContent = result || '😅 うまくいきませんでした'; })
+        .catch(function (err) { out.textContent = '😅 ' + err.message; });
+    }
+
+    // ===== 整える / 要約 =====
+    var TIDY_PROMPTS = {
+      tidy: 'あなたは文章を整える編集者です。渡されたのはOCRで読み取った文字です。'
+        + '明らかな誤読・余分な空白・変な改行を直し、意味は変えずに自然で読みやすい日本語に整えてください。整えた本文だけを返してください。',
+      summary: 'あなたは要約のプロです。渡されたのはOCRで読み取った文字です。'
+        + '要点だけを分かりやすく箇条書きで要約してください。推測で内容を足さず、書かれていることだけをまとめてください。'
+    };
+
+    function tidy(mode) {
+      if (needKey()) return;
+      var text = document.getElementById('ocr').textContent;
+      var out = document.getElementById('tidy');
+      out.innerHTML = '<span class="spin">🤖</span> 高坂先生が整えています…';
+      geminiText(TIDY_PROMPTS[mode] || TIDY_PROMPTS.tidy, text)
+        .then(function (result) { out.textContent = result || '😅 うまくいきませんでした'; })
+        .catch(function (err) { out.textContent = '😅 ' + err.message; });
+    }
+
+    // ===== コピー =====
+    function copyText(id) {
+      var t = document.getElementById(id).textContent;
+      navigator.clipboard.writeText(t).then(function () { alert('コピーしました！'); });
+    }
+
+    // 最初に見本（レシート型）を書式欄に入れておく
+    loadTemplate();
+    // 鍵が未設定なら、最初に設定をうながす
+    if (!geminiKey) { showApiKeyModal(); }
+
+    // ===== スマホアプリ化（Service Worker登録）=====
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', function () {
+        navigator.serviceWorker.register('sw.js');
+      });
+    }
+  </script>
+</body>
+</html>

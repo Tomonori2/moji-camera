@@ -1,0 +1,14 @@
+{
+  "name": "高坂先生の文字起こしカメラ",
+  "short_name": "文字カメラ",
+  "description": "高坂先生が、写真にうつった文字をまるごと読み取ります",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#4a90c4",
+  "theme_color": "#4a90c4",
+  "icons": [
+    { "src": "icon.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon.png", "sizes": "512x512", "type": "image/png", "purpose": "any" }
+  ]
+}
