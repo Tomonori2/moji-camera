@@ -95,6 +95,18 @@
     .spin { display: inline-block; animation: spin 1s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
 
+    /* --- 印刷用：結果だけを白い紙にきれいに出す --- */
+    #printArea { display: none; }
+    @media print {
+      body { background: #fff !important; color: #000 !important; padding: 0 !important; display: block !important; }
+      body > *:not(#printArea) { display: none !important; }
+      #printArea {
+        display: block !important; white-space: pre-wrap;
+        font-family: 'Hiragino Kaku Gothic ProN', 'Meiryo', sans-serif;
+        font-size: 14px; line-height: 1.9; color: #000; padding: 16px;
+      }
+    }
+
     /* --- APIキー設定モーダル --- */
     #apiKeyModal {
       display: none; position: fixed; inset: 0; z-index: 300;
@@ -165,6 +177,7 @@
       <button class="btn btn-tidy" id="tidy-btn" onclick="tidy('tidy')" disabled>✨ 読みやすく整える</button>
       <button class="btn btn-sum"  id="sum-btn"  onclick="tidy('summary')" disabled>💫 要約する</button>
       <button class="btn btn-ghost" onclick="copyText('ocr')">📋 コピー</button>
+      <button class="btn btn-ghost" onclick="printText('ocr')">🖨 印刷</button>
     </div>
   </div>
 
@@ -188,6 +201,7 @@
     <div class="result" id="formatted" style="margin-top:14px;">ここに、書式に入れた結果が出ます</div>
     <div class="row" style="margin-top:10px;">
       <button class="btn btn-ghost" onclick="copyText('formatted')">📋 コピー</button>
+      <button class="btn btn-ghost" onclick="printText('formatted')">🖨 印刷</button>
     </div>
   </div>
 
@@ -197,8 +211,12 @@
     <div class="result" id="tidy">「整える」か「要約する」を押してね</div>
     <div class="row" style="margin-top:10px;">
       <button class="btn btn-ghost" onclick="copyText('tidy')">📋 コピー</button>
+      <button class="btn btn-ghost" onclick="printText('tidy')">🖨 印刷</button>
     </div>
   </div>
+
+  <!-- 印刷用エリア（画面では見えない・印刷のときだけ出る） -->
+  <div id="printArea"></div>
 
   <!-- APIキー設定モーダル -->
   <div id="apiKeyModal">
@@ -471,6 +489,12 @@
     function copyText(id) {
       var t = document.getElementById(id).textContent;
       navigator.clipboard.writeText(t).then(function () { alert('コピーしました！'); });
+    }
+
+    // ===== 印刷（その結果だけを白い紙にきれいに出す）=====
+    function printText(id) {
+      document.getElementById('printArea').textContent = document.getElementById(id).textContent;
+      window.print();
     }
 
     // 最初に見本（レシート型）を書式欄に入れておく
