@@ -1,5 +1,5 @@
 // 高坂先生の文字起こしカメラ – サービスワーカー（スマホアプリ化用）
-const CACHE = 'moji-camera-v3';
+const CACHE = 'moji-camera-v4';
 const SHELL = ['./', 'index.html', 'manifest.json', 'icon.png', 'robot.png'];
 
 // インストール時：画面の部品をキャッシュ

@@ -282,18 +282,24 @@
     }
 
     function handleGemini(res) {
-      if (res.status === 400 || res.status === 403) {
-        throw new Error('APIキーが正しくないかも。右上の「🔑 APIキー設定」を確認してね');
+      if (res.ok) {
+        return res.json().then(function (d) {
+          var t = d && d.candidates && d.candidates[0] && d.candidates[0].content
+            && d.candidates[0].content.parts && d.candidates[0].content.parts[0]
+            && d.candidates[0].content.parts[0].text;
+          return (t || '').trim();
+        });
       }
-      if (res.status === 429) {
-        throw new Error('Geminiの無料枠が混んでいます。少し待ってからもう一度ためしてね');
-      }
-      if (!res.ok) { throw new Error('Geminiエラー（' + res.status + '）'); }
-      return res.json().then(function (d) {
-        var t = d && d.candidates && d.candidates[0] && d.candidates[0].content
-          && d.candidates[0].content.parts && d.candidates[0].content.parts[0]
-          && d.candidates[0].content.parts[0].text;
-        return (t || '').trim();
+      // エラー時：Geminiが返す本当の理由を取り出して表示する
+      return res.json().catch(function () { return null; }).then(function (d) {
+        var detail = (d && d.error && d.error.message) ? d.error.message : ('HTTP ' + res.status);
+        if (res.status === 400 || res.status === 403) {
+          throw new Error('APIキーの問題かも。右上「🔑 APIキー設定」を確認してね\n（詳細：' + detail + '）');
+        }
+        if (res.status === 429) {
+          throw new Error('Geminiの無料枠の上限みたい。1分ほど待つか、明日また試してね\n（詳細：' + detail + '）');
+        }
+        throw new Error('Geminiエラー（' + res.status + '）\n（詳細：' + detail + '）');
       });
     }
 
