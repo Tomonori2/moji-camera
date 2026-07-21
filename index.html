@@ -81,9 +81,20 @@
     }
     textarea#tpl:focus { outline: 2px solid rgba(255,255,255,0.5); }
 
-    #preview {
-      display: none; width: 100%; max-height: 280px; object-fit: contain;
-      margin-top: 14px; border-radius: 12px; background: rgba(0,0,0,0.25);
+    .page-strip { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+    .page-thumb {
+      position: relative; width: 78px; height: 78px; border-radius: 10px;
+      overflow: hidden; background: rgba(0,0,0,0.25); flex-shrink: 0;
+    }
+    .page-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+    .page-thumb .num {
+      position: absolute; left: 4px; bottom: 4px; background: rgba(0,0,0,0.6);
+      color: #fff; font-size: 11px; padding: 1px 6px; border-radius: 8px;
+    }
+    .page-thumb .del {
+      position: absolute; top: 2px; right: 2px; width: 20px; height: 20px;
+      border-radius: 50%; background: rgba(0,0,0,0.65); color: #fff; border: none;
+      font-size: 12px; line-height: 20px; cursor: pointer; padding: 0;
     }
 
     .result {
@@ -157,16 +168,20 @@
 
   <!-- STEP 1: 写真を用意 -->
   <div class="card">
-    <div class="label">STEP 1 ＿ 写真を用意する</div>
+    <div class="label">STEP 1 ＿ 写真を用意する（複数ページOK）</div>
     <div class="row">
       <button class="btn btn-cam" onclick="document.getElementById('cam-input').click()">📷 写真をとる</button>
       <button class="btn btn-pic" onclick="document.getElementById('pic-input').click()">🖼 画像を選ぶ</button>
       <span class="status" id="status">ボタンを押して、文字を写してね</span>
     </div>
     <input type="file" id="cam-input" accept="image/*" capture="environment" style="display:none;" onchange="pickImage(this)">
-    <input type="file" id="pic-input" accept="image/*" style="display:none;" onchange="pickImage(this)">
-    <img id="preview" alt="プレビュー">
-    <div class="hint">📌 看板・書類・レシート・メモなど。明るく・まっすぐ・大きく写すとよく読めます</div>
+    <input type="file" id="pic-input" accept="image/*" multiple style="display:none;" onchange="pickImage(this)">
+    <div id="pageStrip" class="page-strip"></div>
+    <div class="row" style="margin-top:12px;">
+      <button class="btn btn-form" id="read-btn" onclick="readAllPages()" disabled>🔍 まとめて読み取る（<span id="page-count">0</span>枚）</button>
+      <button class="btn btn-ghost" id="clear-btn" onclick="clearPages()" disabled>🗑 やり直す</button>
+    </div>
+    <div class="hint">📌 看板・書類・レシート・メモなど。明るく・まっすぐ・大きく写すとよく読めます。複数ページの書類は、1ページずつ追加してから「まとめて読み取る」を押してね</div>
   </div>
 
   <!-- STEP 2: 読み取り結果 -->
@@ -320,17 +335,18 @@
       return false;
     }
 
-    // 画像をGeminiで読む（OCR）
-    function geminiVision(promptText, dataUrl) {
-      var mime = dataUrl.substring(5, dataUrl.indexOf(';'));
-      var b64 = dataUrl.substring(dataUrl.indexOf(',') + 1);
+    // 画像をGeminiで読む（OCR）。dataUrlsは1枚でも複数枚でもOK
+    function geminiVision(promptText, dataUrls) {
+      var list = Array.isArray(dataUrls) ? dataUrls : [dataUrls];
+      var imageParts = list.map(function (dataUrl) {
+        var mime = dataUrl.substring(5, dataUrl.indexOf(';'));
+        var b64 = dataUrl.substring(dataUrl.indexOf(',') + 1);
+        return { inline_data: { mime_type: mime, data: b64 } };
+      });
       return callGemini(function () {
         return {
-          contents: [{ parts: [
-            { text: promptText },
-            { inline_data: { mime_type: mime, data: b64 } }
-          ] }],
-          generationConfig: { temperature: 0, maxOutputTokens: 4096 }
+          contents: [{ parts: [{ text: promptText }].concat(imageParts) }],
+          generationConfig: { temperature: 0, maxOutputTokens: 8192 }
         };
       });
     }
@@ -370,18 +386,22 @@
       });
     }
 
-    // ===== 写真を選ぶ → 小さくして読み取る =====
+    // ===== 写真を選ぶ → ためておく（複数ページ対応）=====
+    var pages = []; // 小さくした画像のdataURLを順番に持っておく
+
     function pickImage(input) {
-      var file = input.files[0];
-      if (!file) return;
+      var files = Array.prototype.slice.call(input.files);
+      if (!files.length) return;
       input.value = '';
       if (needKey()) return;
-      var reader = new FileReader();
-      reader.onload = function (e) { shrinkAndRead(e.target.result); };
-      reader.readAsDataURL(file);
+      files.forEach(function (file) {
+        var reader = new FileReader();
+        reader.onload = function (e) { shrinkAndAdd(e.target.result); };
+        reader.readAsDataURL(file);
+      });
     }
 
-    function shrinkAndRead(dataUrl) {
+    function shrinkAndAdd(dataUrl) {
       var img = new Image();
       img.onload = function () {
         var max = 1280;
@@ -393,27 +413,57 @@
         var canvas = document.createElement('canvas');
         canvas.width = w; canvas.height = h;
         canvas.getContext('2d').drawImage(img, 0, 0, w, h);
-        var small = canvas.toDataURL('image/jpeg', 0.8);
-        var pv = document.getElementById('preview');
-        pv.src = small; pv.style.display = 'block';
-        readImage(small);
+        pages.push(canvas.toDataURL('image/jpeg', 0.8));
+        renderPageStrip();
       };
       img.src = dataUrl;
     }
 
-    var OCR_PROMPT = '画像に写っているすべての文字を、見た目のレイアウト・改行をできるだけ保ったまま正確に書き出してください。'
+    function renderPageStrip() {
+      var strip = document.getElementById('pageStrip');
+      strip.innerHTML = pages.map(function (p, i) {
+        return '<div class="page-thumb"><img src="' + p + '" alt="' + (i + 1) + 'ページ目">'
+          + '<span class="num">' + (i + 1) + '</span>'
+          + '<button class="del" onclick="removePage(' + i + ')">✕</button></div>';
+      }).join('');
+      document.getElementById('page-count').textContent = pages.length;
+      document.getElementById('read-btn').disabled = pages.length === 0;
+      document.getElementById('clear-btn').disabled = pages.length === 0;
+      document.getElementById('status').textContent = pages.length
+        ? pages.length + '枚のページを追加中。全部そろったら「まとめて読み取る」を押してね'
+        : 'ボタンを押して、文字を写してね';
+    }
+
+    function removePage(i) {
+      pages.splice(i, 1);
+      renderPageStrip();
+    }
+
+    function clearPages() {
+      pages = [];
+      renderPageStrip();
+      document.getElementById('ocr').textContent = 'ここに読み取った文字が表示されます';
+      document.getElementById('tidy-btn').disabled = true;
+      document.getElementById('sum-btn').disabled = true;
+      document.getElementById('form-btn').disabled = true;
+    }
+
+    var OCR_PROMPT = '画像は書類のページを撮影したものです（1枚〜複数枚）。'
+      + '各画像に写っているすべての文字を、見た目のレイアウト・改行をできるだけ保ったまま正確に書き出してください。'
+      + '画像が2枚以上あるときは、渡された順番どおりに「――― 2ページ目 ―――」のような見出しを付けてページを区切ってください（1ページ目には見出しを付けません）。'
       + '前置き・説明・感想・マークダウン記号は一切付けず、読み取った文字だけを返してください。'
       + '文字が一つも見つからない場合は「（文字は見つかりませんでした）」とだけ返してください。';
 
-    function readImage(dataUrl) {
+    function readAllPages() {
+      if (!pages.length) return;
       var el = document.getElementById('ocr');
-      el.innerHTML = '<span class="spin">🤖</span> 高坂先生が読み取り中…ピポパポ！';
+      el.innerHTML = '<span class="spin">🤖</span> 高坂先生が読み取り中…ピポパポ！（' + pages.length + '枚）';
       document.getElementById('status').textContent = '読み取り中…';
       document.getElementById('tidy-btn').disabled = true;
       document.getElementById('sum-btn').disabled = true;
       document.getElementById('form-btn').disabled = true;
 
-      geminiVision(OCR_PROMPT, dataUrl)
+      geminiVision(OCR_PROMPT, pages)
         .then(function (text) {
           el.textContent = text || '（文字は見つかりませんでした）';
           document.getElementById('tidy-btn').disabled = false;
