@@ -267,8 +267,8 @@
     var geminiModel = localStorage.getItem('geminiModel') || '';
 
     function modelUrl(model) {
-      return 'https://generativelanguage.googleapis.com/v1beta/models/' + model
-        + ':generateContent?key=' + encodeURIComponent(geminiKey);
+      // キーはアドレスに付けず、fetch の見出し（x-goog-api-key）で送る。アドレスは記録に残りやすいため
+      return 'https://generativelanguage.googleapis.com/v1beta/models/' + model + ':generateContent';
     }
 
     // 一時的なエラー（混雑・上限・モデル無し）は次のモデルや再挑戦で対応する
@@ -292,7 +292,7 @@
           var model = list[i];
           return fetch(modelUrl(model), {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'x-goog-api-key': geminiKey },
             body: JSON.stringify(bodyFactory())
           }).then(function (res) {
             if (res.ok) {
